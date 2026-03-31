@@ -105,19 +105,20 @@ if not portHandler.setBaudRate(BAUDRATE):
     portHandler.closePort()
     raise SystemExit
 
-dxl_comm_result, dxl_error = packetHandler.write1ByteTxRx(
-    portHandler, DXL_ID, ADDR_TORQUE_ENABLE, TORQUE_ENABLE
-)
+for motor_id in DXL_IDs:
+    dxl_comm_result, dxl_error = packetHandler.write1ByteTxRx(
+        portHandler, motor_id, ADDR_TORQUE_ENABLE, TORQUE_ENABLE
+    )
 
-if dxl_comm_result != COMM_SUCCESS:
-    print(packetHandler.getTxRxResult(dxl_comm_result))
-    portHandler.closePort()
-    raise SystemExit
-
-if dxl_error != 0:
-    print(packetHandler.getRxPacketError(dxl_error))
-    portHandler.closePort()
-    raise SystemExit
+    if dxl_comm_result != COMM_SUCCESS:
+        print(packetHandler.getTxRxResult(dxl_comm_result))
+        portHandler.closePort()
+        raise SystemExit
+    
+    if dxl_error != 0:
+        print(packetHandler.getRxPacketError(dxl_error))
+        portHandler.closePort()
+        raise SystemExit
 
 print("Dynamixel connected")
 print(f"OSC server listening on {OSC_IP}:{OSC_PORT}")
@@ -127,11 +128,11 @@ status_label.config(text=f"Listening for OSC on {OSC_IP}:{OSC_PORT} at /goal")
 
 # ---------------- MOTOR UPDATE LOOP ----------------
 
-def update_motor():
+def update_motor(motor_id):
     goal = goal_position
 
     dxl_comm_result, dxl_error = packetHandler.write4ByteTxRx(
-        portHandler, DXL_ID, ADDR_GOAL_POSITION, goal
+        portHandler, motor_id, ADDR_GOAL_POSITION, goal
     )
 
     if dxl_comm_result != COMM_SUCCESS:
@@ -140,7 +141,7 @@ def update_motor():
         print(packetHandler.getRxPacketError(dxl_error))
 
     dxl_present_position, dxl_comm_result, dxl_error = packetHandler.read4ByteTxRx(
-        portHandler, DXL_ID, ADDR_PRESENT_POSITION
+        portHandler, motor_id, ADDR_PRESENT_POSITION
     )
 
     if dxl_comm_result != COMM_SUCCESS:
@@ -151,9 +152,14 @@ def update_motor():
         present_label.config(text="Present Position: packet error")
     else:
         present_label.config(text=f"Present Position: {dxl_present_position}")
-        print(f"[ID:{DXL_ID:03d}] Goal:{goal:04d}  Present:{dxl_present_position:04d}")
+        print(f"[ID:{motor_id:03d}] Goal:{goal:04d}  Present:{dxl_present_position:04d}")
 
-    root.after(1, update_motor)
+  
+
+def update_motors():
+    for motor in DXL_IDs:
+        update_motor(motor)
+    root.after(1, update_motors)
 
 # ---------------- CLEAN EXIT ----------------
 
@@ -165,9 +171,9 @@ def on_close():
         pass
 
     try:
-        packetHandler.write1ByteTxRx(
-            portHandler, DXL_ID, ADDR_TORQUE_ENABLE, TORQUE_DISABLE
-        )
+        for id in DXL_IDs: packetHandler.write1ByteTxRx(
+            portHandler, id, ADDR_TORQUE_ENABLE, TORQUE_DISABLE
+            )        
     except Exception:
         pass
 
@@ -188,6 +194,6 @@ osc_server.serve_forever_thread = __import__("threading").Thread( # type: ignore
 osc_server.serve_forever_thread.start() # type: ignore
 
 # Start periodic motor update
-root.after(1, update_motor)
+root.after(1, update_motors)
 
 root.mainloop()
